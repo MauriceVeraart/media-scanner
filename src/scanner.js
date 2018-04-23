@@ -168,7 +168,8 @@ module.exports = function ({ config, db, logger }) {
         x["vsize"] = height
         x["codec"] = codec
         x["type"] = type
-        x["framerate"] = json.streams[0].time_base
+        fr = String(json.streams[0].r_frame_rate).split('/')
+        x["framerate"] = fr[0]
         x["duration"] = dur
         x["name"] = doc._id
 
