@@ -13,6 +13,8 @@ const statAsync = util.promisify(fs.stat)
 const unlinkAsync = util.promisify(fs.unlink)
 const readFileAsync = util.promisify(fs.readFile)
 
+var x = {}
+
 module.exports = function ({ config, db, logger }) {
   Observable
     .create(o => {
@@ -153,21 +155,40 @@ module.exports = function ({ config, db, logger }) {
         let type = ' AUDIO '
         if (json.streams[0].pix_fmt) {
           type = dur <= (1 / 24) ? ' STILL ' : ' MOVIE '
-
-          const fr = String(json.streams[0].avg_frame_rate || json.streams[0].r_frame_rate || '').split('/')
-          if (fr.length === 2) {
+          const fr = String(json.streams[0].avg_frame_rate || json.streams[0].r_frame_rate ||'').split('/')
+         if (fr.length === 2) {//was 2
             tb = [ fr[1], fr[0] ]
           }
         }
+        let width = json.streams[0].width
+        let height = json.streams[0].height
+        let codec = json.streams[0].codec_name
+        //
+        x["hsize"] = width
+        x["vsize"] = height
+        x["codec"] = codec
+        x["type"] = type
+        x["framerate"] = json.streams[0].time_base
+        x["duration"] = dur
+        x["name"] = doc._id
 
+        console.log("-----B-----")
+        console.log(x)
+        console.log("-----E-----")
+        resolve(JSON.stringify(x))
+        /*
         resolve([
           `"${getId(config.paths.media, doc.mediaPath)}"`,
           type,
           doc.mediaSize,
           moment(doc.thumbTime).format('YYYYMMDDHHmmss'),
           Math.floor((dur * tb[1]) / tb[0]),
-          `${tb[0]}/${tb[1]}`
+          `${tb[0]}/${tb[1]}`,
+          //
+          width,height,codec
+          //
         ].join(' ') + '\r\n')
+        */
       })
     })
   }
