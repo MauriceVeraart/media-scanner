@@ -13,6 +13,8 @@ const statAsync = util.promisify(fs.stat)
 const unlinkAsync = util.promisify(fs.unlink)
 const readFileAsync = util.promisify(fs.readFile)
 
+var x = {}
+
 module.exports = function ({ config, db, logger }) {
   Observable
     .create(o => {
@@ -28,7 +30,7 @@ module.exports = function ({ config, db, logger }) {
         .on('add', (path, stat) => o.next([ path, stat ]))
         .on('change', (path, stat) => o.next([ path, stat ]))
         .on('unlink', (path, stat) => o.next([ path ]))
-      return () => watcher.cancel()
+      return () => watcher.close()
     })
     // TODO (perf) groupBy + mergeMap with concurrency.
     .concatMap(async ([ mediaPath, mediaStat ]) => {
@@ -44,6 +46,53 @@ module.exports = function ({ config, db, logger }) {
       }
     })
     .subscribe()
+
+  async function cleanDeleted () {
+    logger.info('Checking for dead media')
+
+    const limit = 256
+    let startkey = undefined
+    while (true) {
+      const deleted = []
+
+      const { rows } = await db.allDocs({
+        include_docs: true,
+        startkey,
+        limit
+      })
+      await Promise.all(rows.map(async ({ doc }) => {
+        try {
+          if (doc.mediaPath.indexOf(config.scanner.paths) === 0) {
+            try {
+              const stat = await statAsync(doc.mediaPath)
+              if (stat.isFile()) {
+                return
+              }
+            } catch (e) {
+              // File not found
+            }
+          }
+
+          deleted.push({
+            _id: doc._id,
+            _rev: doc._rev,
+            _deleted: true
+          })
+        } catch (err) {
+          logger.error({ err, doc })
+        }
+      }))
+      if (rows.length < limit) {
+        break
+      }
+      startkey = rows[rows.length-1].doc._id
+
+      await db.bulkDocs(deleted)
+    }
+
+    logger.info(`Finished check for dead media`)
+  }
+  cleanDeleted()
 
   async function scanFile (mediaPath, mediaId, mediaStat) {
     if (!mediaId || mediaStat.isDirectory()) {
@@ -153,21 +202,41 @@ module.exports = function ({ config, db, logger }) {
         let type = ' AUDIO '
         if (json.streams[0].pix_fmt) {
           type = dur <= (1 / 24) ? ' STILL ' : ' MOVIE '
-
-          const fr = String(json.streams[0].avg_frame_rate || json.streams[0].r_frame_rate || '').split('/')
-          if (fr.length === 2) {
+          const fr = String(json.streams[0].avg_frame_rate || json.streams[0].r_frame_rate ||'').split('/')
+         if (fr.length === 2) {//was 2
             tb = [ fr[1], fr[0] ]
           }
         }
+        let width = json.streams[0].width
+        let height = json.streams[0].height
+        let codec = json.streams[0].codec_name
+        //
+        x["hsize"] = width
+        x["vsize"] = height
+        x["codec"] = codec
+        x["type"] = type
+        fr = String(json.streams[0].r_frame_rate).split('/')
+        x["framerate"] = fr[0]
+        x["duration"] = dur
+        x["name"] = doc._id
 
+        console.log("-----B-----")
+        console.log(x)
+        console.log("-----E-----")
+        resolve(JSON.stringify(x))
+        /*
         resolve([
           `"${getId(config.paths.media, doc.mediaPath)}"`,
           type,
           doc.mediaSize,
           moment(doc.thumbTime).format('YYYYMMDDHHmmss'),
           Math.floor((dur * tb[1]) / tb[0]),
-          `${tb[0]}/${tb[1]}`
+          `${tb[0]}/${tb[1]}`,
+          //
+          width,height,codec
+          //
         ].join(' ') + '\r\n')
+        */
       })
     })
   }

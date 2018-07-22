@@ -1,5 +1,6 @@
 const express = require('express')
 const pinoHttp = require('pino-http')
+const PouchDB = require('pouchdb-node')
 const util = require('util')
 const recursiveReadDir = require('recursive-readdir')
 const { getId } = require('./util')
@@ -8,19 +9,31 @@ const recursiveReadDirAsync = util.promisify(recursiveReadDir)
 
 const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 
+
+
 module.exports = function ({ db, config, logger }) {
   const app = express()
-
+  var x = []
   app.use(pinoHttp({ logger }))
+
+  app.use('/db', require('express-pouchdb')(PouchDB, {
+    mode: 'minimumForPouchDB'
+  }))
 
   app.get('/cls', wrap(async (req, res) => {
     const { rows } = await db.allDocs({ include_docs: true })
-
+    console.log("-----------------BEGIN-------------------")
+    for (i = 0; i < rows.length; i++) {
+      x[i] = rows[i].doc.cinf
+    }
+    console.log(x)
+    console.log("-------------------END-----------------")
     const str = rows
       .map(row => row.doc.cinf || '')
       .reduce((acc, inf) => acc + inf, '')
 
-    res.send(`200 CLS OK\r\n${str}\r\n`)
+    //res.send(`200 CLS OK\r\n${str}\r\n`)
+    res.send(`200 CLS OK\r\n${JSON.stringify(x)}\r\n`)
   }))
 
   app.get('/tls', wrap(async (req, res) => {
