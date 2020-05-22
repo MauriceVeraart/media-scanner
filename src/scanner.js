@@ -62,7 +62,9 @@ module.exports = function ({ config, db, logger }) {
       })
       await Promise.all(rows.map(async ({ doc }) => {
         try {
-          if (doc.mediaPath.indexOf(config.scanner.paths) === 0) {
+          const mediaFolder = path.normalize(config.scanner.paths)
+          const mediaPath = path.normalize(doc.mediaPath)
+          if (mediaPath.indexOf(mediaFolder) === 0) {
             try {
               const stat = await statAsync(doc.mediaPath)
               if (stat.isFile()) {
@@ -145,8 +147,9 @@ module.exports = function ({ config, db, logger }) {
       config.paths.ffmpeg,
       '-hide_banner',
       '-i', `"${doc.mediaPath}"`,
+      '-vf select=gt(scene\,0.4)',
+      `-vf scale=${config.thumbnails.width}:${config.thumbnails.height}`,
       '-frames:v 1',
-      `-vf thumbnail,scale=${config.thumbnails.width}:${config.thumbnails.height}`,
       '-threads 1',
       tmpPath
     ]
